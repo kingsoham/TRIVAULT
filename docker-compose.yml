@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: trivault-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: trivault
+    volumes:
+      - mongo_data:/data/db
+
+  minio:
+    image: minio/minio:RELEASE.2023-09-20T22-40-07Z
+    container_name: trivault-minio
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  minio-create-bucket:
+    image: minio/mc:RELEASE.2023-09-20T23-49-14Z
+    container_name: trivault-minio-mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb myminio/trivault-shards;
+      /usr/bin/mc policy set private myminio/trivault-shards;
+      exit 0;
+      "
+
+volumes:
+  mongo_data:
+  minio_data:
