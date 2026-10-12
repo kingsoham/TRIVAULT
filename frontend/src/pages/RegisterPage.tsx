@@ -23,7 +23,11 @@ export const RegisterPage: React.FC = () => {
       await register(name, email, password, role);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed');
+      if (err.response?.status === 404 || err.code === 'ERR_NETWORK' || !err.response) {
+        setError('Cannot reach Backend API. Please check your backend deployment URL.');
+      } else {
+        setError(err.response?.data?.message || err.message || 'Registration failed');
+      }
     } finally {
       setLoading(false);
     }

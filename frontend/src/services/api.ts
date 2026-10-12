@@ -1,18 +1,30 @@
 import axios from 'axios';
 
-const apiBase = import.meta.env.VITE_API_URL
-  ? `${(import.meta.env.VITE_API_URL as string).replace(/\/$/, '')}/api/v1`
-  : '/api/v1';
+export const getApiBaseUrl = (): string => {
+  const custom = typeof window !== 'undefined' ? localStorage.getItem('trivault_api_url') : null;
+  const envUrl = import.meta.env.VITE_API_URL;
+  const target = (custom && custom.trim() !== '') ? custom.trim() : envUrl;
+  return target ? `${target.replace(/\/$/, '')}/api/v1` : '/api/v1';
+};
+
+export const setApiBaseUrl = (url: string) => {
+  if (url && url.trim() !== '') {
+    localStorage.setItem('trivault_api_url', url.trim());
+  } else {
+    localStorage.removeItem('trivault_api_url');
+  }
+};
 
 export const api = axios.create({
-  baseURL: apiBase,
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor to attach Authorization Bearer token automatically
+// Interceptor to attach Authorization Bearer token and dynamic baseURL automatically
 api.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl();
   const token = localStorage.getItem('trivault_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
