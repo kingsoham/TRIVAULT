@@ -2,6 +2,7 @@ import { Response } from 'express';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth.js';
 import { File } from '../models/File.js';
+import { User } from '../models/User.js';
 import { SecurityEvent } from '../models/SecurityEvent.js';
 import { encryptFileBuffer, decryptFileBuffer } from '../crypto/aes.js';
 import { splitIntoThreeShards, reconstructFromThreeShards } from '../sharding/shardSplitter.js';
@@ -189,13 +190,15 @@ export async function getFileDetails(req: AuthRequest, res: Response) {
   const currentUser = req.user;
 
   try {
-    const file = await File.findById(req.params.id).populate('owner', 'name email');
+    const file = await File.findById(req.params.id)
+      .populate('owner', 'name email role')
+      .populate('sharingPermissions.user', 'name email role');
     if (!file || file.fileStatus === 'DELETED') {
       return res.status(404).json({ success: false, message: 'File not found' });
     }
 
     const isOwner = file.owner._id.toString() === currentUser.id;
-    const isShared = file.sharingPermissions.some((p) => p.user.toString() === currentUser.id);
+    const isShared = file.sharingPermissions.some((p) => p.user && (p.user as any)._id.toString() === currentUser.id);
     const isAdmin = currentUser.role === 'admin';
 
     if (!isOwner && !isShared && !isAdmin) {
@@ -211,6 +214,9 @@ export async function getFileDetails(req: AuthRequest, res: Response) {
         originalSize: file.originalSize,
         encryptedSize: file.encryptedSize,
         owner: file.owner,
+        isOwner,
+        isShared,
+        sharingPermissions: file.sharingPermissions,
         fileStatus: file.fileStatus,
         encryptionAlgorithm: file.encryptionMetadata.algorithm,
         shards: file.shards.map((s) => ({
@@ -391,6 +397,110 @@ export async function deleteFile(req: AuthRequest, res: Response) {
     });
 
     return res.json({ success: true, message: 'File and all associated shards deleted successfully.' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+}
+
+export async function shareFile(req: AuthRequest, res: Response) {
+  if (!req.user) return res.status(401).json({ success: false, message: 'Authentication required' });
+  const currentUser = req.user;
+
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ success: false, message: 'Recipient email is required.' });
+    }
+
+    const file = await File.findById(req.params.id);
+    if (!file || file.fileStatus === 'DELETED') {
+      return res.status(404).json({ success: false, message: 'File not found' });
+    }
+
+    const isOwner = file.owner.toString() === currentUser.id;
+    const isAdmin = currentUser.role === 'admin';
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Only the Vault Owner or Security Administrator can grant access to this file.' });
+    }
+
+    const targetUser = await User.findOne({ email: email.toLowerCase() });
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: `User with email '${email}' was not found. Please ensure they have registered an account.` });
+    }
+
+    if (targetUser._id.toString() === file.owner.toString()) {
+      return res.status(400).json({ success: false, message: 'User is already the owner of this vault.' });
+    }
+
+    const alreadyShared = file.sharingPermissions.some((p) => p.user.toString() === targetUser._id.toString());
+    if (alreadyShared) {
+      return res.status(400).json({ success: false, message: `Access is already granted to '${targetUser.email}'.` });
+    }
+
+    file.sharingPermissions.push({ user: targetUser._id, permission: 'read' });
+    await file.save();
+
+    await SecurityEvent.create({
+      eventType: 'ACCESS_GRANTED',
+      fileId: file._id,
+      filename: file.filename,
+      requesterId: currentUser.id,
+      requesterEmail: currentUser.email,
+      reason: `Vault Owner granted read access to '${targetUser.email}'`,
+      simulatedResponseStatus: 'NONE',
+    });
+
+    const populatedFile = await File.findById(file._id).populate('sharingPermissions.user', 'name email role');
+
+    return res.json({
+      success: true,
+      message: `Access to 3-shard file '${file.filename}' granted to ${targetUser.email}.`,
+      sharingPermissions: populatedFile?.sharingPermissions || [],
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+}
+
+export async function revokeSharing(req: AuthRequest, res: Response) {
+  if (!req.user) return res.status(401).json({ success: false, message: 'Authentication required' });
+  const currentUser = req.user;
+
+  try {
+    const file = await File.findById(req.params.id);
+    if (!file || file.fileStatus === 'DELETED') {
+      return res.status(404).json({ success: false, message: 'File not found' });
+    }
+
+    const isOwner = file.owner.toString() === currentUser.id;
+    const isAdmin = currentUser.role === 'admin';
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Only the Vault Owner or Security Administrator can revoke access.' });
+    }
+
+    const targetUserId = req.params.userId;
+    file.sharingPermissions = file.sharingPermissions.filter(
+      (p) => p.user.toString() !== targetUserId
+    );
+    await file.save();
+
+    await SecurityEvent.create({
+      eventType: 'ACCESS_REVOKED',
+      fileId: file._id,
+      filename: file.filename,
+      requesterId: currentUser.id,
+      requesterEmail: currentUser.email,
+      reason: `Vault Owner revoked file access for user ID ${targetUserId}`,
+      simulatedResponseStatus: 'NONE',
+    });
+
+    const populatedFile = await File.findById(file._id).populate('sharingPermissions.user', 'name email role');
+
+    return res.json({
+      success: true,
+      message: 'Access revoked successfully.',
+      sharingPermissions: populatedFile?.sharingPermissions || [],
+    });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
   }
