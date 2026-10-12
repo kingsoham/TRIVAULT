@@ -7,15 +7,19 @@ export async function connectDB(): Promise<void> {
   mongoose.set('strictQuery', true);
 
   // 1. Try connecting to configured MongoDB instance (with a short timeout so we don't hang if it's down)
-  try {
-    await mongoose.connect(env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 2000,
-    });
-    console.log(`[MongoDB] Connected successfully to ${env.MONGODB_URI}`);
-    return;
-  } catch (err: any) {
-    console.warn(`[MongoDB] External MongoDB connection at ${env.MONGODB_URI} failed (${err.message}).`);
-    console.log('[MongoDB] Launching embedded In-Memory MongoDB Server...');
+  if (env.MONGODB_URI !== 'memory' && env.MONGODB_URI !== 'none') {
+    try {
+      await mongoose.connect(env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 2000,
+      });
+      console.log(`[MongoDB] Connected successfully to ${env.MONGODB_URI}`);
+      return;
+    } catch (err: any) {
+      console.warn(`[MongoDB] External MongoDB connection at ${env.MONGODB_URI} failed (${err.message}).`);
+      console.log('[MongoDB] Launching embedded In-Memory MongoDB Server...');
+    }
+  } else {
+    console.log('[MongoDB] In-memory mode active. Launching embedded MongoDB Server...');
   }
 
   // 2. Fall back automatically to MongoMemoryServer

@@ -26,11 +26,11 @@ async function startServer() {
   }
 
   const port = parseInt(env.PORT, 10) || 5000;
-  app.listen(port, () => {
+  app.listen(port, '0.0.0.0', () => {
     console.log(`=======================================================`);
     console.log(`  TriVault Backend Server running on port ${port}`);
-    console.log(`  Health Check: http://localhost:${port}/health`);
-    console.log(`  API Base URL: http://localhost:${port}/api/v1`);
+    console.log(`  Health Check: http://0.0.0.0:${port}/health`);
+    console.log(`  API Base URL: http://0.0.0.0:${port}/api/v1`);
     console.log(`=======================================================`);
   });
 }
