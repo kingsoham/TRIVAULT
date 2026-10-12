@@ -1,11 +1,20 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { getFirebaseInstance, googleProvider } from '../config/firebase';
+import {
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  signOut,
+} from 'firebase/auth';
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'user' | 'admin';
+  role: 'owner' | 'user' | 'admin';
+  authProvider?: 'local' | 'firebase';
 }
 
 interface AuthContextType {
@@ -14,7 +23,10 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, role?: string) => Promise<void>;
+  register: (name: string, email: string, password: string, role?: 'owner' | 'user' | 'admin') => Promise<void>;
+  loginWithGoogle: (role?: 'owner' | 'user') => Promise<void>;
+  loginWithFirebaseEmail: (email: string, password: string, role?: 'owner' | 'user') => Promise<void>;
+  registerWithFirebaseEmail: (name: string, email: string, password: string, role: 'owner' | 'user') => Promise<void>;
   logout: () => void;
 }
 
@@ -56,8 +68,81 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('trivault_user', JSON.stringify(newUser));
   };
 
-  const register = async (name: string, email: string, password: string, role?: string) => {
-    const res = await api.post('/auth/register', { name, email, password, role });
+  const register = async (name: string, email: string, password: string, role?: 'owner' | 'user' | 'admin') => {
+    const res = await api.post('/auth/register', { name, email, password, role: role || 'owner' });
+    const { token: newToken, user: newUser } = res.data;
+    setToken(newToken);
+    setUser(newUser);
+    localStorage.setItem('trivault_token', newToken);
+    localStorage.setItem('trivault_user', JSON.stringify(newUser));
+  };
+
+  const loginWithGoogle = async (role: 'owner' | 'user' = 'owner') => {
+    const { auth } = getFirebaseInstance();
+    if (!auth) {
+      throw new Error('Firebase Authentication is not configured. Please set your Firebase config first.');
+    }
+
+    const result = await signInWithPopup(auth, googleProvider);
+    const idToken = await result.user.getIdToken();
+
+    const res = await api.post('/auth/firebase-sync', {
+      idToken,
+      email: result.user.email,
+      name: result.user.displayName || result.user.email?.split('@')[0],
+      firebaseUid: result.user.uid,
+      role,
+    });
+
+    const { token: newToken, user: newUser } = res.data;
+    setToken(newToken);
+    setUser(newUser);
+    localStorage.setItem('trivault_token', newToken);
+    localStorage.setItem('trivault_user', JSON.stringify(newUser));
+  };
+
+  const loginWithFirebaseEmail = async (email: string, password: string, role: 'owner' | 'user' = 'owner') => {
+    const { auth } = getFirebaseInstance();
+    if (!auth) {
+      throw new Error('Firebase Authentication is not configured. Please set your Firebase config first.');
+    }
+
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    const idToken = await result.user.getIdToken();
+
+    const res = await api.post('/auth/firebase-sync', {
+      idToken,
+      email: result.user.email,
+      name: result.user.displayName || email.split('@')[0],
+      firebaseUid: result.user.uid,
+      role,
+    });
+
+    const { token: newToken, user: newUser } = res.data;
+    setToken(newToken);
+    setUser(newUser);
+    localStorage.setItem('trivault_token', newToken);
+    localStorage.setItem('trivault_user', JSON.stringify(newUser));
+  };
+
+  const registerWithFirebaseEmail = async (name: string, email: string, password: string, role: 'owner' | 'user') => {
+    const { auth } = getFirebaseInstance();
+    if (!auth) {
+      throw new Error('Firebase Authentication is not configured. Please set your Firebase config first.');
+    }
+
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(result.user, { displayName: name });
+    const idToken = await result.user.getIdToken();
+
+    const res = await api.post('/auth/firebase-sync', {
+      idToken,
+      email: result.user.email,
+      name,
+      firebaseUid: result.user.uid,
+      role,
+    });
+
     const { token: newToken, user: newUser } = res.data;
     setToken(newToken);
     setUser(newUser);
@@ -70,6 +155,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     localStorage.removeItem('trivault_token');
     localStorage.removeItem('trivault_user');
+
+    const { auth } = getFirebaseInstance();
+    if (auth) {
+      signOut(auth).catch(() => {});
+    }
   };
 
   return (
@@ -81,6 +171,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         register,
+        loginWithGoogle,
+        loginWithFirebaseEmail,
+        registerWithFirebaseEmail,
         logout,
       }}
     >

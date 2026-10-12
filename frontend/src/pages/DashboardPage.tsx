@@ -5,7 +5,10 @@ import { api } from '../services/api';
 import { UploadModal } from '../components/UploadModal';
 import { ShardFlowDiagram } from '../components/ShardFlowDiagram';
 
+import { useAuth } from '../context/AuthContext';
+
 export const DashboardPage: React.FC = () => {
+  const { user } = useAuth();
   const [files, setFiles] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -46,13 +49,22 @@ export const DashboardPage: React.FC = () => {
           <p className="text-xs text-slate-400">Overview of 3-shard encrypted file storage & active security monitoring</p>
         </div>
 
-        <button
-          onClick={() => setIsUploadOpen(true)}
-          className="px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 shadow-lg shadow-cyan-500/20 flex items-center space-x-2 transition-all self-start sm:self-auto"
-        >
-          <Upload className="w-4 h-4" />
-          <span>Upload New File</span>
-        </button>
+        <div className="flex items-center space-x-3 self-start sm:self-auto">
+          {user?.role === 'user' ? (
+            <div className="px-3.5 py-2 rounded-xl text-xs bg-violet-950/40 border border-violet-800/50 text-violet-300 flex items-center space-x-2">
+              <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
+              <span>Standard User (Authorized Shared Files)</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsUploadOpen(true)}
+              className="px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 shadow-lg shadow-cyan-500/20 flex items-center space-x-2 transition-all"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Upload New File (Vault Owner)</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Quick Metric Cards */}

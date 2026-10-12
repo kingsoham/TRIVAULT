@@ -39,10 +39,16 @@ export const Navbar: React.FC = () => {
             <div className="hidden md:flex items-center space-x-2 bg-[#121722] border border-[#1e2638] rounded-lg px-3 py-1.5">
               <UserIcon className="w-4 h-4 text-cyan-400" />
               <span className="text-xs text-slate-300 font-medium">{user?.name}</span>
-              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded uppercase ${
-                user?.role === 'admin' ? 'bg-purple-950 text-purple-300 border border-purple-800/50' : 'bg-slate-800 text-slate-400'
-              }`}>
-                {user?.role}
+              <span
+                className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-semibold tracking-wide ${
+                  user?.role === 'owner'
+                    ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-700/60'
+                    : user?.role === 'admin'
+                    ? 'bg-purple-950/80 text-purple-300 border border-purple-700/60'
+                    : 'bg-violet-950/80 text-violet-300 border border-violet-700/60'
+                }`}
+              >
+                {user?.role === 'owner' ? 'Vault Owner' : user?.role === 'admin' ? 'Security Admin' : 'Standard User'}
               </span>
             </div>
 

@@ -22,12 +22,13 @@ export async function seedDatabase(shouldExit = false): Promise<void> {
   const passwordHash = await bcrypt.hash('Password123!', 10);
   const adminPasswordHash = await bcrypt.hash('AdminSecret123!', 10);
 
-  // 1. Create standard demo user
+  // 1. Create standard demo user (Vault Owner)
   const demoUser = await User.create({
-    name: 'Alex Mercer (Owner)',
+    name: 'Alex Mercer (Vault Owner)',
     email: 'user@trivault.io',
     passwordHash,
-    role: 'user',
+    role: 'owner',
+    authProvider: 'local',
   });
 
   // 2. Create unauthorized demo user (attacker simulation)

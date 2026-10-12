@@ -103,13 +103,19 @@ export const FileManagerPage: React.FC = () => {
           <p className="text-xs text-slate-400">Manage 3-shard encrypted files, inspect shard states, and test access controls</p>
         </div>
 
-        <button
-          onClick={() => setIsUploadOpen(true)}
-          className="px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 shadow-lg shadow-cyan-500/20 flex items-center space-x-2 transition-all self-start sm:self-auto"
-        >
-          <Upload className="w-4 h-4" />
-          <span>Upload File</span>
-        </button>
+        {user?.role !== 'user' ? (
+          <button
+            onClick={() => setIsUploadOpen(true)}
+            className="px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 shadow-lg shadow-cyan-500/20 flex items-center space-x-2 transition-all self-start sm:self-auto"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Upload File (Vault Owner)</span>
+          </button>
+        ) : (
+          <div className="px-3.5 py-2 rounded-xl text-xs bg-violet-950/40 border border-violet-800/50 text-violet-300">
+            <span>Standard User Vault Access</span>
+          </div>
+        )}
       </div>
 
       {alertMsg && (

@@ -11,6 +11,14 @@ export async function uploadFile(req: AuthRequest, res: Response) {
   if (!req.user) return res.status(401).json({ success: false, message: 'Authentication required' });
   const currentUser = req.user;
 
+  // Role Authorization: Only Vault Owners and Admins are permitted to upload and partition files
+  if (currentUser.role === 'user') {
+    return res.status(403).json({
+      success: false,
+      message: 'Access Denied: Only Vault Owners or Security Administrators can upload and shard files. Standard Users have read/download access to authorized files.',
+    });
+  }
+
   if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
 
   const fileId = new mongoose.Types.ObjectId();

@@ -11,13 +11,81 @@ const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  role: z.enum(['user', 'admin']).optional(),
+  role: z.enum(['owner', 'user', 'admin']).optional(),
 });
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
 });
+
+const firebaseSyncSchema = z.object({
+  idToken: z.string(),
+  email: z.string().email('Invalid email address'),
+  name: z.string().optional(),
+  firebaseUid: z.string(),
+  role: z.enum(['owner', 'user', 'admin']).optional(),
+});
+
+export async function firebaseSync(req: Request, res: Response) {
+  try {
+    const parseResult = firebaseSyncSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ success: false, errors: parseResult.error.flatten().fieldErrors });
+    }
+
+    const { email, name, firebaseUid, role } = parseResult.data;
+    let user = await User.findOne({
+      $or: [{ firebaseUid }, { email: email.toLowerCase() }],
+    });
+
+    let isNew = false;
+    if (!user) {
+      isNew = true;
+      user = await User.create({
+        name: name || email.split('@')[0],
+        email: email.toLowerCase(),
+        firebaseUid,
+        authProvider: 'firebase',
+        role: role || 'owner',
+      });
+    } else {
+      if (!user.firebaseUid) {
+        user.firebaseUid = firebaseUid;
+        user.authProvider = 'firebase';
+        await user.save();
+      }
+    }
+
+    const token = jwt.sign(
+      { id: user._id.toString(), email: user.email, role: user.role },
+      env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    await SecurityEvent.create({
+      eventType: isNew ? 'USER_REGISTERED' : 'USER_LOGIN',
+      requesterId: user._id,
+      requesterEmail: user.email,
+      reason: `Firebase authentication (${user.role} role)`,
+      simulatedResponseStatus: 'NONE',
+    });
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        authProvider: user.authProvider,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+}
 
 export async function register(req: Request, res: Response) {
   try {
@@ -34,7 +102,7 @@ export async function register(req: Request, res: Response) {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const userRole = role || 'user';
+    const userRole = role || 'owner';
 
     const user = await User.create({
       name,
@@ -89,6 +157,13 @@ export async function login(req: Request, res: Response) {
         simulatedResponseStatus: 'NONE',
       });
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+    }
+
+    if (!user.passwordHash) {
+      return res.status(401).json({
+        success: false,
+        message: 'This account was authenticated with Firebase/Google. Please sign in with Firebase.',
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
